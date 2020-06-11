@@ -1,3 +1,5 @@
+// swiftlint:disable all
+
 /*Copyright (c) 2016, Andrew Walz.
  
  Redistribution and use in source and binary forms, with or without modification,are permitted provided that the following conditions are met:
@@ -13,55 +15,12 @@
  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. */
 
-import Foundation
-import AVFoundation
 import UIKit
-import CoreMotion
+import AVFoundation
 
+class Orientation {
 
-class Orientation  {
-    
-    var shouldUseDeviceOrientation: Bool  = false
-    
-    fileprivate var deviceOrientation : UIDeviceOrientation?
-    fileprivate let coreMotionManager = CMMotionManager()
-    
-    init() {
-        coreMotionManager.accelerometerUpdateInterval = 0.1
-    }
-    
-    func start() {
-        self.deviceOrientation = UIDevice.current.orientation
-        coreMotionManager.startAccelerometerUpdates(to: .main) { [weak self] (data, error) in
-            guard let data = data else {
-                return
-            }
-            self?.handleAccelerometerUpdate(data: data)
-        }
-    }
-  
-    func stop() {
-        self.coreMotionManager.stopAccelerometerUpdates()
-        self.deviceOrientation = nil
-    }
-    
-    func getImageOrientation(forCamera: SwiftyCamViewController.CameraSelection) -> UIImage.Orientation {
-        guard shouldUseDeviceOrientation, let deviceOrientation = self.deviceOrientation else { return forCamera == .rear ? .right : .leftMirrored }
-        
-        switch deviceOrientation {
-        case .landscapeLeft:
-            return forCamera == .rear ? .up : .downMirrored
-        case .landscapeRight:
-            return forCamera == .rear ? .down : .upMirrored
-        case .portraitUpsideDown:
-            return forCamera == .rear ? .left : .rightMirrored
-        default:
-            return forCamera == .rear ? .right : .leftMirrored
-        }
-    }
-    
     func getPreviewLayerOrientation() -> AVCaptureVideoOrientation {
-        // Depends on layout orientation, not device orientation
         switch UIApplication.shared.statusBarOrientation {
         case .portrait, .unknown:
             return AVCaptureVideoOrientation.portrait
@@ -73,38 +32,18 @@ class Orientation  {
             return AVCaptureVideoOrientation.portraitUpsideDown
         }
     }
-    
-    func getVideoOrientation() -> AVCaptureVideoOrientation? {
-        guard shouldUseDeviceOrientation, let deviceOrientation = self.deviceOrientation else { return nil }
-        
-        switch deviceOrientation {
-        case .landscapeLeft:
-            return .landscapeRight
-        case .landscapeRight:
-            return .landscapeLeft
+
+    func getImageOrientation(forCamera: SwiftyCamViewController.CameraSelection) -> UIImage.Orientation {
+        switch getPreviewLayerOrientation() {
+        case .portrait:
+            return forCamera == .rear ? .right : .leftMirrored
         case .portraitUpsideDown:
-            return .portraitUpsideDown
-        default:
-            return .portrait
+            return forCamera == .rear ? .left : .rightMirrored
+        case .landscapeRight:
+            return forCamera == .rear ? .up : .downMirrored
+        case .landscapeLeft:
+            return forCamera == .rear ? .down : .upMirrored
         }
     }
-    
-    private func handleAccelerometerUpdate(data: CMAccelerometerData){
-        if(abs(data.acceleration.y) < abs(data.acceleration.x)){
-            if(data.acceleration.x > 0){
-                deviceOrientation = UIDeviceOrientation.landscapeRight
-            } else {
-                deviceOrientation = UIDeviceOrientation.landscapeLeft
-            }
-        } else{
-            if(data.acceleration.y > 0){
-                deviceOrientation = UIDeviceOrientation.portraitUpsideDown
-            } else {
-                deviceOrientation = UIDeviceOrientation.portrait
-            }
-        }
-    }
+
 }
-
-
-
