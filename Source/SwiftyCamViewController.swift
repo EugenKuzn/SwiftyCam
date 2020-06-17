@@ -23,7 +23,7 @@ import AVFoundation
 
 /// A UIViewController Camera View Subclass
 
-open class SwiftyCamViewController: UIViewController {
+open class SwiftyCamViewController: UIViewController, AVCapturePhotoCaptureDelegate {
 
 	// MARK: Enumeration Declaration
 
@@ -185,6 +185,8 @@ open class SwiftyCamViewController: UIViewController {
     /// Setting to true will prompt user for access to microphone on View Controller launch.
     public var audioEnabled                   = true
 
+    public var shutterSoundEnabled            = true
+
     /// Sets whether or not app should display prompt to app settings if audio/video permission is denied
     /// If set to false, delegate function will be called to handle exception
     public var shouldPrompToAppSettings       = true
@@ -255,7 +257,7 @@ open class SwiftyCamViewController: UIViewController {
 
 	/// Photo File Output variable
 
-	fileprivate var photoFileOutput              : AVCaptureStillImageOutput?
+    fileprivate var capturePhotoOutput           : AVCapturePhotoOutput?
 
 	/// Video Device variable
 
@@ -434,21 +436,42 @@ open class SwiftyCamViewController: UIViewController {
 	*/
 
 	public func takePhoto() {
-
 		guard let device = videoDevice else {
 			return
 		}
 
-        if device.hasFlash == true && flashMode != .off /* TODO: Add Support for Retina Flash and add front flash */ {
+        if device.hasFlash, flashMode != .off {
             changeFlashSettings(device: device, mode: flashMode)
-			capturePhotoAsyncronously(completionHandler: { (_) in })
-        }else{
-			if device.isFlashActive == true {
-				changeFlashSettings(device: device, mode: flashMode)
-			}
-			capturePhotoAsyncronously(completionHandler: { (_) in })
-		}
+        } else if device.isFlashActive {
+            changeFlashSettings(device: device, mode: flashMode)
+        }
+
+        let settings = AVCapturePhotoSettings()
+        settings.flashMode = flashMode.AVFlashMode
+
+        capturePhotoOutput?.capturePhoto(with: settings, delegate: self)
 	}
+
+    // MARK: - AVCapturePhotoCaptureDelegate
+
+    public func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
+        guard let imageData = photo.fileDataRepresentation() else {
+            return
+        }
+
+        let image = processPhoto(imageData)
+
+        // Call delegate and return new image
+        DispatchQueue.main.async {
+            self.cameraDelegate?.swiftyCam(self, didTake: image)
+        }
+    }
+
+    public func photoOutput(_ output: AVCapturePhotoOutput, willCapturePhotoFor resolvedSettings: AVCaptureResolvedPhotoSettings) {
+        if !shutterSoundEnabled {
+            AudioServicesDisposeSystemSoundID(1108)
+        }
+    }
 
 	/**
 
@@ -612,7 +635,7 @@ open class SwiftyCamViewController: UIViewController {
 		addVideoInput()
 		addAudioInput()
 		configureVideoOutput()
-		configurePhotoOutput()
+		configureCapturePhotoOutput()
 
 		session.commitConfiguration()
 	}
@@ -755,14 +778,13 @@ open class SwiftyCamViewController: UIViewController {
 
 	/// Configure Photo Output
 
-	fileprivate func configurePhotoOutput() {
-		let photoFileOutput = AVCaptureStillImageOutput()
+	fileprivate func configureCapturePhotoOutput() {
+        let capturePhotoOutput = AVCapturePhotoOutput()
 
-		if self.session.canAddOutput(photoFileOutput) {
-			photoFileOutput.outputSettings  = [AVVideoCodecKey: AVVideoCodecJPEG]
-			self.session.addOutput(photoFileOutput)
-			self.photoFileOutput = photoFileOutput
-		}
+        if self.session.canAddOutput(capturePhotoOutput) {
+            self.session.addOutput(capturePhotoOutput)
+            self.capturePhotoOutput = capturePhotoOutput
+        }
 	}
 
 
@@ -783,34 +805,6 @@ open class SwiftyCamViewController: UIViewController {
         let image = UIImage(cgImage: cgImageRef!, scale: 1.0, orientation: self.orientation.getImageOrientation(forCamera: self.currentCamera))
 
 		return image
-	}
-
-	fileprivate func capturePhotoAsyncronously(completionHandler: @escaping(Bool) -> ()) {
-
-        guard sessionRunning == true else {
-            print("[SwiftyCam]: Cannot take photo. Capture session is not running")
-            return
-        }
-
-		if let videoConnection = photoFileOutput?.connection(with: AVMediaType.video) {
-
-			photoFileOutput?.captureStillImageAsynchronously(from: videoConnection, completionHandler: {(sampleBuffer, error) in
-				if (sampleBuffer != nil) {
-					let imageData = AVCaptureStillImageOutput.jpegStillImageNSDataRepresentation(sampleBuffer!)
-					let image = self.processPhoto(imageData!)
-
-					// Call delegate and return new image
-					DispatchQueue.main.async {
-						self.cameraDelegate?.swiftyCam(self, didTake: image)
-					}
-					completionHandler(true)
-				} else {
-					completionHandler(false)
-				}
-			})
-		} else {
-			completionHandler(false)
-		}
 	}
 
 	/// Handle Denied App Privacy Settings
@@ -892,7 +886,7 @@ open class SwiftyCamViewController: UIViewController {
 
 	/// Enable or disable flash for photo
 
-fileprivate func changeFlashSettings(device: AVCaptureDevice, mode: FlashMode) {
+    fileprivate func changeFlashSettings(device: AVCaptureDevice, mode: FlashMode) {
 		do {
 			try device.lockForConfiguration()
 			device.flashMode = mode.AVFlashMode
