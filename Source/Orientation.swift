@@ -22,14 +22,14 @@ class Orientation {
 
     func getPreviewLayerOrientation() -> AVCaptureVideoOrientation {
         switch UIApplication.shared.statusBarOrientation {
-        case .portrait, .unknown:
-            return AVCaptureVideoOrientation.portrait
         case .landscapeLeft:
-            return AVCaptureVideoOrientation.landscapeLeft
+            return .landscapeLeft
         case .landscapeRight:
-            return AVCaptureVideoOrientation.landscapeRight
+            return .landscapeRight
         case .portraitUpsideDown:
-            return AVCaptureVideoOrientation.portraitUpsideDown
+            return .portraitUpsideDown
+        default:
+            return .portrait
         }
     }
 
